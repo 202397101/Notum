@@ -8,7 +8,6 @@ Aging is associated with increased intestinal prostaglandin E2 (PGE2) production
 ---
 
 **Overview of repository**  
-Overview
 
 We combined single-cell and bulk transcriptome analyses of human and mouse intestine to show that prostaglandin programs increase in the aged intestine, and that sustained PGE2 exposure induces secretory-lineage skewing through Paneth cell-derived NOTUM. The analyses in this repository cover:
 
