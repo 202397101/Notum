@@ -31,7 +31,6 @@ R code used to generate the main figures (Figures 1–5) of the manuscript.
 | `Figure 3.R` | Figure 3 | Wnt signaling and Notum: GO ORA of Day 1 / Day 4 CBC (3A), Wnt-related GO terms (3B), mouse CBC Wnt score (3C), *Lgr5* in young vs aged ISCs (3F), human CBC Wnt score, young vs old (3G) |
 | `Figure 4.R` | Figure 4 | scRNA-seq with PGE2 plus the NOTUM inhibitor ABC99 (iNOTUM): UMAP (4A), cell type proportion (4B), *Lyz1* / *Muc2* expression (4C), Monocle2 trajectory (4D), pseudotime of State 3 cells (4E), GO ORA of CBC (4J) |
 | `Figure 5.R` | Figure 5 | Aged crypts and organoids: MSigDB ORA of old organoid vs old crypt DEGs (5D), SecAct secreted protein activity (5E), organoid cell type proportion, control vs IFN-γ (5F), PGE2 metabolism and Wnt target genes in organoid CBC (5G), IFN-γ vs WNT ssGSEA correlation in GTEx small intestine (5H) |
-| `gseaPlot.R` | Figure 1E | GSEA enrichment plot function, sourced by `Figure 1.R` |
 
 Panels not listed above were not generated with this code.
 
@@ -49,7 +48,7 @@ Panels not listed above were not generated with this code.
 
 ## Input files and folder layout
 
-The scripts start from processed R objects: Seurat objects, DEG tables and Monocle2 objects. Set `dir` at the top of each script to the input data folder. Scripts write TIFF files to `figure/`. Run them from the repository root, because `Figure 1.R` sources `gseaPlot.R`.
+The scripts start from processed R objects: Seurat objects, DEG tables and Monocle2 objects. Set `dir` at the top of each script to the input data folder. Scripts write TIFF files to `figure/`.
 
 ```
 data/
