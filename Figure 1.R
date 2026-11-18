@@ -1,36 +1,39 @@
-###############
-# Figure1A
-###############
-dir = "E:/Dropbox/PNU/시스템생물학연구실/data/aging_PGE2"
-dir_geo = "E:/Dropbox/PNU/시스템생물학연구실/data/aging_PGE2/public_scRNA"
+#####################################################################
+# Figure 1 - Prostaglandin programs in the aged intestine
+#
+# Code for: "Paneth cell-derived Notum to drive lineage skewing and impair intestinal regeneration"
+# GitHub : https://github.com/202397101/Notum
+# Zenodo : https://doi.org/10.5281/zenodo.23102321
+#
+# Data   : E-MTAB-9543 (human colon scRNA-seq), GSE213723 (mouse epithelium bulk RNA-seq)
+# Each panel section below can be run on its own (it loads its own input and packages).
+# See README.md for the input files and the folder layout.
+#####################################################################
 
+# ---- Paths (edit before running) ----
+dir     = "data"                          # input data folder (Rdata/, GEO/, MsigDB/)
+dir_geo = file.path(dir, "public_scRNA")  # public scRNA-seq datasets
+dir_db  = file.path(dir, "DB")            # msigdb/ (MSigDB GMT), GTEx/
+out_dir = "figure"                        # output TIFF files
+dir.create(out_dir, showWarnings = FALSE)
+
+
+
+###############
+# Figure 1A
+###############
 load(file = sprintf("%s/2_E-MTAB-9543/Rdata/2-3_integration.Rdata", dir_geo)) #s.integrated
-
 
 library(Seurat)
 library(tidyverse)
-library(Matrix) 
-library(ggplot2)
-library(patchwork)
-library(stringr)
-library(dplyr)
-library(SingleCellExperiment)
+library(Matrix)
 library(clusterProfiler)
-library(org.Hs.eg.db)
-library(GOfuncR)
-library(fgsea)
-library(forcats)
-library(pheatmap)
-library(gridExtra)
-library(grid)
-library(RColorBrewer)
-library(ggtext)
 library(factoextra)
 
 
 DefaultAssay(s.integrated) = "integrated"
 uniqueIDs = unique(s.integrated$individual)
-age.map = c("417C"='67.5', "411C"='27.5', "A33 (414C)"='52.5') 
+age.map = c("417C"='67.5', "411C"='27.5', "A33 (414C)"='52.5')
 s.integrated@meta.data$numeric.age = age.map[as.character(s.integrated$individual)]
 expr.mtx = t(as.matrix(
   GetAssayData(s.integrated, layer = "data")
@@ -45,35 +48,39 @@ age.group = as.character(s.integrated$age[valid.cells])
 df = as.data.frame(expr.mtx)
 df$age_group = age.group
 
+# mean expression per age group -> row z-score
 avg.expr = df %>%
   group_by(age_group) %>%
   summarise(across(where(is.numeric), mean, na.rm = TRUE))
-expr.mat = t(as.matrix(avg.expr[,-1])) 
+expr.mat = t(as.matrix(avg.expr[,-1]))
 colnames(expr.mat) = avg.expr$age_group
 
 scaled.expr = t(scale(t(expr.mat)))
-scaled.expr = scaled.expr[complete.cases(scaled.expr), ]  
+scaled.expr = scaled.expr[complete.cases(scaled.expr), ]
 
-ep = fviz_nbclust(scaled.expr, FUN = hcut, method = "wss", k.max = 10, linecolor = "black") + 
+# elbow method for the number of clusters
+ep = fviz_nbclust(scaled.expr, FUN = hcut, method = "wss", k.max = 10, linecolor = "black") +
   ggtitle("Elbow method for hierarchical clustering") +
   theme(axis.text = element_blank(),
         axis.title = element_blank(),
-        title = element_blank()) 
+        title = element_blank())
 clu3 = ep$data[2,]
 
-ep + geom_line(size = 0.1, color = "black") +              
-  geom_point(size = 1, color = "black") +                
-  geom_point(data = clu3, aes(x = clusters, y = y),        
+ep + geom_line(size = 0.1, color = "black") +
+  geom_point(size = 1, color = "black") +
+  geom_point(data = clu3, aes(x = clusters, y = y),
              color = "red", size = 2.5)
 
 
+# hierarchical clustering (ward.D2, k = 2)
 scaled.expr = t(scale(t(expr.mat)))
-scaled.expr = scaled.expr[complete.cases(scaled.expr), ]  
-gene.dist = dist(scaled.expr) 
-hc = hclust(gene.dist, method = "ward.D2") 
-k = 2  
+scaled.expr = scaled.expr[complete.cases(scaled.expr), ]
+gene.dist = dist(scaled.expr)
+hc = hclust(gene.dist, method = "ward.D2")
+k = 2
 clusters = cutree(hc, k = k)
-clu.col = c("gold", "red")
+clusters = setNames(c(2, 1)[clusters], names(clusters))  # Cluster 1 = increases with age, Cluster 2 = decreases
+clu.col = c("red", "gold")
 names(clu.col) = as.character(1:k)
 
 plot.df = scaled.expr %>%
@@ -101,12 +108,12 @@ x_end = length(age_levels)
 
 plot.df$cluster_num = as.character(clusters[plot.df$gene])
 
-tiff(filename = sprintf("%s/figure/Figure1A.tiff", dir), width = 22/3*k, height = 6, units = 'cm', res = 300)
+tiff(filename = sprintf("%s/Figure1A.tiff", out_dir), width = 22/3*k, height = 6, units = 'cm', res = 300)
 ggplot(plot.df, aes(x = age_group, y = scaled_expr, group = gene)) +
   geom_line(alpha = 0.4, color = "grey", size = 0.3) +
-  stat_summary(aes(group = 1, color = cluster_num), fun = mean, geom = "line", size = 1.2) + 
+  stat_summary(aes(group = 1, color = cluster_num), fun = mean, geom = "line", size = 1.2) +
   geom_segment(aes(x = x_start, xend = x_end, y = -2, yend = -2),
-               inherit.aes = FALSE, color = "black", size = 0.5) + 
+               inherit.aes = FALSE, color = "black", size = 0.5) +
   facet_wrap(~cluster, scales = "fixed", nrow = 1) +
   coord_cartesian(ylim = c(-2, 2)) +
   theme_minimal(base_size = 12) +
@@ -124,17 +131,16 @@ ggplot(plot.df, aes(x = age_group, y = scaled_expr, group = gene)) +
 dev.off()
 
 
-########## Pathways ##########
+########## Pathways (WikiPathways ORA per cluster) ##########
 cluster.genes = split(names(clusters), clusters)
 lapply(cluster.genes, function(i) {
   i[grepl('PTGS|PTGES', i)]
 })
 
+msig.wp = read.gmt(sprintf("%s/MsigDB/c2.cp.wikipathways.v2024.1.Hs.symbols.gmt", dir))
 oral = list()
-i=1
 for (i in 1:length(cluster.genes)) {
   genes = cluster.genes[[i]]
-  msig.wp = read.gmt("E:/Dropbox/PNU/시스템생물학연구실/data/aging_PGE2/MsigDB/c2.cp.wikipathways.v2024.1.Hs.symbols.gmt")
   ora = data.frame(enricher(gene =genes, TERM2GENE = msig.wp, pAdjustMethod = "BH",pvalueCutoff = 0.05))
   oral[[names(cluster.genes)[i]]] = ora
 }
@@ -150,13 +156,12 @@ top5 = lapply(oral, function(df) {
   return(df)
 })
 
-pg.gene = top5$'2'[4,]$geneID
+pg.gene = top5$'1'[4,]$geneID
 pg.gene = unlist(strsplit(pg.gene, split = "/"))
 
 bar.plots = lapply(names(top5), function(cl) {
   ggplot(data = top5[[cl]], aes(x = reorder(ID, pvalue), y = pvalue)) +
     coord_flip() +
-    #geom_hline(yintercept = -log10(0.01), color = "red", size = 0.5) +
     geom_bar(stat = "identity", width = 0.8, fill = clu.col[cl]) +
     ylab("-log10 P-value") + xlab("") +
     ggtitle(paste('Cluster', cl))+
@@ -174,35 +179,56 @@ bar.plots = lapply(names(top5), function(cl) {
     geom_vline(xintercept = 0, color = "dimgrey", size = 0.3) +
     geom_hline(yintercept = 0, color = "dimgrey", size = 0.3) +
     geom_text(aes(label = ID, y = 0.01), hjust = 0, size = 4, color = "black")+
-    scale_y_continuous(expand = c(0, 0)) +  
+    scale_y_continuous(expand = c(0, 0)) +
     scale_x_discrete(expand = c(0, 1))
 })
 names(bar.plots) = names(top5)
 bar.plots
 
+bind_rows(oral, .id = "cluster") %>%
+  mutate(Description = str_to_sentence(gsub("_", " ", gsub("WP_", "", ID)))) %>%
+  filter(Description %in% c("Prostaglandin synthesis and regulation",
+                            "Proinflammatory and profibrotic mediators")) %>%
+  dplyr::select(cluster, Description, pvalue, p.adjust, geneID)
+
+
+
+########## Cell / gene numbers used for clustering ##########
+# cells per age group
+table(age.group)
+table(s.integrated$individual[valid.cells], age.group)
+
+# detected genes per cell per age group (RNA assay)
+s.integrated@meta.data[valid.cells, ] %>%
+  mutate(age_group = age.group) %>%
+  group_by(age_group) %>%
+  summarise(n_cell = n(),
+            median_nFeature = median(nFeature_RNA),
+            mean_nFeature = mean(nFeature_RNA),
+            median_nCount = median(nCount_RNA))
+
+# genes used for clustering
+nrow(s.integrated[["integrated"]])   # genes in the integrated assay
+ncol(expr.mtx)                       # genes used for mean expression
+nrow(scaled.expr)                    # genes after scaling (NA removed) = genes clustered
+table(clusters)                      # genes per cluster
+
+
 
 ###############
-# Figure1B
+# Figure 1B
 ###############
-dir = "E:/Dropbox/PNU/시스템생물학연구실/data/aging_PGE2"
-dir_geo = "E:/Dropbox/PNU/시스템생물학연구실/data/aging_PGE2/public_scRNA"
-
 load(file = sprintf("%s/2_E-MTAB-9543/Rdata/2-3_integration.Rdata", dir_geo)) #s.integrated
-
 
 library(Seurat)
 library(tidyverse)
 library(Matrix)
-library(ggplot2)
-library(stringr)
-library(dplyr)
 library(clusterProfiler)
-library(org.Hs.eg.db)
-library(ggrepel)
 
 
+# same gene clustering as Figure 1A
 DefaultAssay(s.integrated) = "integrated"
-age.map = c("417C"='67.5', "411C"='27.5', "A33 (414C)"='52.5') 
+age.map = c("417C"='67.5', "411C"='27.5', "A33 (414C)"='52.5')
 s.integrated@meta.data$numeric.age = age.map[as.character(s.integrated$individual)]
 expr.mtx = t(as.matrix(
   GetAssayData(s.integrated, layer = "data")
@@ -218,26 +244,28 @@ df$age_group = as.character(s.integrated$age[valid.cells])
 avg.expr = df %>%
   group_by(age_group) %>%
   summarise(across(where(is.numeric), mean, na.rm = TRUE))
-expr.mat = t(as.matrix(avg.expr[,-1])) 
+expr.mat = t(as.matrix(avg.expr[,-1]))
 colnames(expr.mat) = avg.expr$age_group
 scaled.expr = t(scale(t(expr.mat)))
-scaled.expr = scaled.expr[complete.cases(scaled.expr), ]  
+scaled.expr = scaled.expr[complete.cases(scaled.expr), ]
 gene.dist = dist(scaled.expr)
 hc = hclust(gene.dist, method = "ward.D2")
-k = 2  
+k = 2
 clusters = cutree(hc, k = k)
-clu.col = c("gold", "red")[1:k]
+clusters = setNames(c(2, 1)[clusters], names(clusters))  # Cluster 1 = increases with age, Cluster 2 = decreases
+clu.col = c("red", "gold")[1:k]
 names(clu.col) = as.character(1:k)
 
 cluster.genes = split(names(clusters), clusters)
-msig.wp = read.gmt("E:/Dropbox/PNU/시스템생물학연구실/data/aging_PGE2/MsigDB/c2.cp.wikipathways.v2024.1.Hs.symbols.gmt")
+msig.wp = read.gmt(sprintf("%s/MsigDB/c2.cp.wikipathways.v2024.1.Hs.symbols.gmt", dir))
 oral = list()
 for (i in 1:length(cluster.genes)) {
   ora = data.frame(enricher(gene = cluster.genes[[i]], TERM2GENE = msig.wp, pAdjustMethod = "BH", pvalueCutoff = 0.05))
   oral[[names(cluster.genes)[i]]] = ora
 }
 
-pg.gene = head(oral$'2', 5)[4,]$geneID  
+# genes of WP_PROSTAGLANDIN_SYNTHESIS_AND_REGULATION in Cluster 1 (4th term of the Cluster 1 top 5)
+pg.gene = head(oral$'1', 5)[4,]$geneID
 pg.gene = unlist(strsplit(pg.gene, split = "/"))
 
 
@@ -251,15 +279,12 @@ pg.df = scaled.expr[pg.use, , drop = FALSE] %>%
 pg.df$age_group = factor(pg.df$age_group, levels = c("25-30", "50-55", "65-70"))
 pg.df$cluster_num = as.character(clusters[pg.df$gene])
 
-tiff(filename = sprintf("%s/figure/Figure1B.tiff", dir), width = 10, height = 5, units = 'cm', res = 300)
+tiff(filename = sprintf("%s/Figure1B.tiff", out_dir), width = 10, height = 5, units = 'cm', res = 300)
 ggplot(pg.df, aes(x = age_group, y = scaled_expr, group = gene)) +
-  geom_hline(yintercept = 0, color = "black", linewidth = 0.3, linetype = "dashed") +  
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.3, linetype = "dashed") +
   geom_line(alpha = 0.6, color = "lightsalmon", size = 0.2) +
-  stat_summary(aes(group = 1), fun = mean, geom = "line", size = 1.2, color = clu.col["2"]) + 
-  #geom_text_repel(data = pg.df %>% filter(age_group == "65-70"),
-  #               aes(label = gene), nudge_x = 0.3, direction = "y", hjust = 0,
-  #                size = 2.5, fontface = "italic", segment.size = 0.1, max.overlaps = Inf) +
-  scale_x_discrete(expand = expansion(add = c(0.2, 0.8))) +  # 오른쪽에 유전자 이름 공간
+  stat_summary(aes(group = 1), fun = mean, geom = "line", size = 1.2, color = clu.col["1"]) +
+  scale_x_discrete(expand = expansion(add = c(0.2, 0.8))) +
   coord_cartesian(ylim = c(-2, 2)) +
   theme_minimal(base_size = 12) +
   theme(
@@ -277,37 +302,23 @@ dev.off()
 
 
 ###############
-# Figure1C
+# Figure 1C
 ###############
-dir = "C:/Dropbox/PNU/시스템생물학연구실/data/aging_PGE2"
-dir_geo = "C:/Dropbox/PNU/시스템생물학연구실/data/aging_PGE2/public_scRNA"
-
 load(file = sprintf("%s/2_E-MTAB-9543/Rdata/2-3_integration.Rdata", dir_geo)) #s.integrated
-
 
 library(Seurat)
 library(tidyverse)
 library(Matrix)
-library(ggplot2)
-library(patchwork)
-library(stringr)
-library(dplyr)
-library(SingleCellExperiment)
 library(clusterProfiler)
-library(org.Hs.eg.db)
-library(GOfuncR)
-library(fgsea)
-library(forcats)
-library(RColorBrewer)
 library(singscore)
 library(GSEABase)
-library(ggpubr)
+library(SiPSiC)
 
 
-
+# same gene clustering as Figure 1A
 DefaultAssay(s.integrated) = "integrated"
 uniqueIDs = unique(s.integrated$individual)
-age.map = c("417C"='67.5', "411C"='27.5', "A33 (414C)"='52.5') 
+age.map = c("417C"='67.5', "411C"='27.5', "A33 (414C)"='52.5')
 s.integrated@meta.data$numeric.age = age.map[as.character(s.integrated$individual)]
 expr.mtx = t(as.matrix(
   GetAssayData(s.integrated, layer = "data")
@@ -325,20 +336,21 @@ df$age_group = age.group
 avg.expr = df %>%
   group_by(age_group) %>%
   summarise(across(where(is.numeric), mean, na.rm = TRUE))
-expr.mat = t(as.matrix(avg.expr[,-1]))  
+expr.mat = t(as.matrix(avg.expr[,-1]))
 colnames(expr.mat) = avg.expr$age_group
 scaled.expr = t(scale(t(expr.mat)))
-scaled.expr = scaled.expr[complete.cases(scaled.expr), ]  
+scaled.expr = scaled.expr[complete.cases(scaled.expr), ]
 gene.dist = dist(scaled.expr)
 hc = hclust(gene.dist, method = "ward.D2")
-k = 2 
+k = 2
 clusters = cutree(hc, k = k)
+clusters = setNames(c(2, 1)[clusters], names(clusters))  # Cluster 1 = increases with age, Cluster 2 = decreases
 
 cluster.genes = split(names(clusters), clusters)
+msig.wp = read.gmt(sprintf("%s/MsigDB/c2.cp.wikipathways.v2024.1.Hs.symbols.gmt", dir))
 oral = list()
 for (i in 1:length(cluster.genes)) {
   genes = cluster.genes[[i]]
-  msig.wp = read.gmt("C:/Dropbox/PNU/시스템생물학연구실/data/aging_PGE2/MsigDB/c2.cp.wikipathways.v2024.1.Hs.symbols.gmt")
   ora = data.frame(enricher(gene = genes, TERM2GENE = msig.wp, pAdjustMethod = "BH", pvalueCutoff = 0.05))
   oral[[names(cluster.genes)[i]]] = ora
 }
@@ -352,13 +364,14 @@ top5 = lapply(oral, function(df) {
   return(df)
 })
 
-pg.gene = top5$'2'[4,]$geneID  
+pg.gene = top5$'1'[4,]$geneID
 pg.gene = unlist(strsplit(pg.gene, split = "/"))
 
 DefaultAssay(s.integrated) = 'RNA'
 new = JoinLayers(s.integrated, overwrite = T)
 
 
+# pseudobulk (sum of counts per sample) -> CPM -> singscore
 c.mtx = GetAssayData(new, assay = "RNA", layer = "counts")
 pb.counts = sapply(split(colnames(c.mtx), new$orig.ident), function(cells) Matrix::rowSums(c.mtx[, cells, drop = FALSE]))
 rownames(pb.counts) = rownames(c.mtx)
@@ -379,21 +392,18 @@ singscore.df$age = factor(singscore.df$age, levels = c("25-30","50-55", "65-70")
 table(singscore.df$age)
 
 
-
-library(SiPSiC)
+# single cell: CPM -> SiPSiC
 cell.use = colnames(new)[new$age %in% c("25-30","50-55", "65-70")]
-cell.cpm = sweep(c.mtx[, cell.use], 2, Matrix::colSums(c.mtx[, cell.use]), "/") * 1e6  
+cell.cpm = sweep(c.mtx[, cell.use], 2, Matrix::colSums(c.mtx[, cell.use]), "/") * 1e6
 scores_and_idx = getPathwayScores(as.matrix(cell.cpm[pg.gene, , drop = FALSE]), pg.gene)
-sipsic.df = data.frame(score = as.numeric(scores_and_idx$pathwayScores), 
+sipsic.df = data.frame(score = as.numeric(scores_and_idx$pathwayScores),
                        age = factor(new$age[match(cell.use, colnames(new))], levels = c("25-30","50-55", "65-70")),
                        orig.ident = new$orig.ident[match(cell.use, colnames(new))])
 table(sipsic.df$age)
 
 
-
+# one-sided Spearman correlation with age group
 sp.pb = cor.test(as.numeric(singscore.df$age), singscore.df$TotalScore, method = "spearman", alternative = "greater", exact = FALSE)
-
-
 sp.cell = cor.test(as.numeric(sipsic.df$age), sipsic.df$score, method = "spearman", alternative = "greater", exact = FALSE)
 sp.cell
 
@@ -401,15 +411,17 @@ fmt.p = function(p) ifelse(p < 2.2e-16, "p < 2.2e-16", paste0("p = ", signif(p, 
 stat.label = paste0("Pseudobulk: ρ = ", sprintf("%.2f", sp.pb$estimate), ", ", fmt.p(sp.pb$p.value), "\n",
                     "Cell (SiPSiC): ρ = ", sprintf("%.2f", sp.cell$estimate), ", ", fmt.p(sp.cell$p.value))
 
+# violin: remove outlier cells (1.5 x IQR per age group)
 sipsic.df = sipsic.df %>%
   group_by(age) %>%
   filter(between(score, quantile(score, 0.25) - 1.5 * IQR(score),
                         quantile(score, 0.75) + 1.5 * IQR(score))) %>%
   ungroup() %>%
   as.data.frame()
-table(sipsic.df$age)  # 제거 후 cell 수
+table(sipsic.df$age)  # cells after outlier removal
 
 
+# rescale SiPSiC score onto the singscore axis (right axis = SiPSiC)
 sip.rng = quantile(sipsic.df$score, c(0.05, 0.95), na.rm = TRUE)
 ss.rng = range(singscore.df$TotalScore)
 b = unname(diff(ss.rng) / diff(sip.rng))
@@ -418,16 +430,16 @@ sipsic.df$score.scaled = a + b * sipsic.df$score
 
 grcol = c('darksalmon',"salmon",'saddlebrown')
 
-tiff(filename = sprintf("%s/figure/Figure1C.tiff", dir), width = 7, height = 5, units = 'cm', res = 300)
+tiff(filename = sprintf("%s/Figure1C.tiff", out_dir), width = 7, height = 5, units = 'cm', res = 300)
 ggplot(singscore.df, aes(x = age, y = TotalScore)) +
-  geom_violin(data = sipsic.df, aes(y = score.scaled, fill = age), width = 0.8, alpha = 0.6, scale = "width", linewidth = 0.3) +  # cell (SiPSiC)
-  geom_jitter(shape = "★", width = 0.1, size = 4,color = "red") +  # pseudobulk 샘플 (singscore)
+  geom_violin(data = sipsic.df, aes(y = score.scaled, fill = age), width = 0.8, alpha = 0.6, scale = "width", linewidth = 0.3) +  # cells (SiPSiC)
+  geom_jitter(shape = "★", width = 0.1, size = 4,color = "red") +  # pseudobulk samples (singscore)
   stat_summary(aes(group = 1), fun = median, geom = "line",
-               color = "red", linewidth = 0.4, linetype = "dashed") +  # 샘플 그룹별 중앙값 추세선
+               color = "red", linewidth = 0.4, linetype = "dashed") +  # median per age group
   scale_fill_manual(values = grcol) +
   annotate("text", x = 0.6, y = Inf, label = stat.label, hjust = 0, vjust = 1.5, size = 2.2) +
   scale_y_continuous(name = "Prostaglandin score (singscore, pseudobulk)",
-                     expand = expansion(mult = c(0.05, 0.35)),  # rho/p 글씨(2줄) 들어갈 공간
+                     expand = expansion(mult = c(0.05, 0.35)),
                      sec.axis = sec_axis(~ (. - a) / b, name = "Prostaglandin score (SiPSiC, cell)")) +
   labs(x = "") +
   theme_bw() +
@@ -442,46 +454,24 @@ dev.off()
 
 
 ###############
-# Figure1D
+# Figure 1D
 ###############
-dir = "E:/Dropbox/PNU/시스템생물학연구실/data/aging_PGE2"
-dir_geo = "E:/Dropbox/PNU/시스템생물학연구실/data/aging_PGE2/public_scRNA"
-
-load(file = sprintf("%s/2_E-MTAB-9543/Rdata/2-4_DEG_417C_vs_411C.Rdata", dir_geo)) #deg_417C_vs_411C
-
+load(file = sprintf("%s/2_E-MTAB-9543/Rdata/2-4_DEG_417C_vs_411C.Rdata", dir_geo)) #deg_417C_vs_411C (Seurat FindMarkers, 417C [65-70] vs 411C [25-30])
 
 library(clusterProfiler)
-library(org.Mm.eg.db)
-library(enrichplot)
-library(DOSE)
 library(ggplot2)
 library(ggrepel)
-library(stringr)
-library(igraph)
-library(RCy3)
-library(tidyr)
-library(tibble)
-library(data.table)
-library(igraph)
-library(RCy3)
-library(fgsea)
-library(igraph)
-library(RCy3)
-library(homologene)
-library(BiocParallel)
-library(ggvenn)
-library(EnhancedVolcano)
 
 
 sigGene = deg_417C_vs_411C[deg_417C_vs_411C$p_val < 0.01 & !is.na(deg_417C_vs_411C$p_val),]
 sigGene = sigGene[order(sigGene$avg_log2FC, decreasing = T),]
 
-gsl = read.gmt("C:/Dropbox/PNU/시스템생물학연구실/data/aging_PGE2/MsigDB/c2.cp.wikipathways.v2024.1.Hs.symbols.gmt")
+gsl = read.gmt(sprintf("%s/MsigDB/c2.cp.wikipathways.v2024.1.Hs.symbols.gmt", dir))
 gsl = split(x = gsl$gene, f = gsl$term)
 gset = gsl[grep('WP_PROSTAGLANDIN_SYNTHESIS_AND_REGULATION', names(gsl))]
 gset = unique(unlist(gset))
 
-updeg = deg_417C_vs_411C[deg_417C_vs_411C$avg_log2FC>1 & deg_417C_vs_411C$p_val<0.01 & !is.na(deg_417C_vs_411C$p_val),] 
+updeg = deg_417C_vs_411C[deg_417C_vs_411C$avg_log2FC>1 & deg_417C_vs_411C$p_val<0.01 & !is.na(deg_417C_vs_411C$p_val),]
 inter = intersect(rownames(updeg), gset)
 
 pgeGene = sigGene[rownames(sigGene) %in%  gset,]
@@ -489,34 +479,10 @@ pgeGene = sigGene[rownames(sigGene) %in%  gset,]
 plot.df = data.frame(gene = rownames(pgeGene),
                      logfc = pgeGene$avg_log2FC,
                      updeg = ifelse(rownames(pgeGene) %in% inter, "upDEG", "background"))
-plot.df$rank = rank(-plot.df$logfc, ties.method = "first") 
+plot.df$rank = rank(-plot.df$logfc, ties.method = "first")
 topGenes = subset(plot.df, logfc >= 1)
 
-tiff(filename = sprintf("%s/figure/Figure1B.tiff", dir), width = 8, height = 10, units = 'cm', res = 300)
-ggplot(plot.df, aes(x = rank, y = logfc)) +
-  geom_point(data = subset(plot.df, logfc < 1), shape = 21, col = "darkgrey", fill = "darkgrey", alpha = 0.8, size = 2.5, stroke = 0.1) +
-  geom_point(data = subset(plot.df, logfc >= 1), shape = 21, col = "red", fill = "red3", aes(size = ifelse(gene %in% topGenes$gene, 3.5, 2)), stroke = 0.2, alpha = 0.8) +
-  scale_size_identity() +
-  geom_text_repel(data = topGenes, aes(label = gene), size = 4, color = "red3", segment.size = 0.05, force = 3, nudge_x = 3, fontface = "italic") +
-  scale_x_continuous(breaks = plot.df$rank, labels = plot.df$gene) +  
-  scale_y_continuous(breaks = seq(-5, 4, 1), limits = c(-5,3.5)) +
-  theme_bw() +
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_text(color="black", size=15),
-        axis.title.y = element_blank(),
-        axis.ticks.x = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.grid = element_line(color = "grey", linewidth = 0.1),
-        panel.border = element_blank(), 
-        axis.line = element_line(color="black", size=0.5), 
-        axis.line.x.top = element_blank(),              
-        axis.line.y.right = element_blank()) +
-  labs(x = "", y = "log2FC")
-dev.off()
-
-
-
-tiff(filename = sprintf("%s/figure/Figure1B.tiff", dir), width = 10, height = 10, units = 'cm', res = 300)
+tiff(filename = sprintf("%s/Figure1D.tiff", out_dir), width = 10, height = 10, units = 'cm', res = 300)
 ggplot(plot.df, aes(x = rank, y = logfc)) +
   geom_point(data = subset(plot.df, logfc < 1),
              shape = 21, col = "darkgrey", fill = "darkgrey",
@@ -553,58 +519,38 @@ dev.off()
 
 
 ###############
-# Figure1E
+# Figure 1E
 ###############
-dir = "C:/Dropbox/PNU/시스템생물학연구실/data/aging_PGE2"
+load(file = sprintf("%s/GEO/merge/Rdata/8_merge_DEG.Rdata", dir)) #epi1.deg, epi2.deg, paneth.deg, sm6Stem.deg, deg.li (DESeq2, Aged vs Young)
 
-load(file = sprintf("%s/GEO/merge/Rdata/8_merge_DEG.Rdata", dir)) #epi1.deg, epi2.deg, paneth.deg, sm6Stem.deg, deg.li
+source("gseaPlot.R")  # run from the repository root
 
-source("C:/Dropbox/PNU/시스템생물학연구실/data/gluconeogenesis/bulkRNA/Rscripts/11-2_GSEAplot.R")
-
-
-library(clusterProfiler)
-library(org.Mm.eg.db)
-library(enrichplot)
-library(DOSE)
-library(ggplot2)
-library(ggrepel)
-library(stringr)
-library(igraph)
-library(RCy3)
-library(tidyr)
-library(tibble)
-library(data.table)
-library(igraph)
-library(RCy3)
 library(fgsea)
-library(igraph)
-library(RCy3)
-library(lsa)
+library(BiocParallel)
+library(msigdbr)
 
 
-# Epi1
+# Epithelium (GSE213723): genes ranked by DESeq2 Wald statistic
 idx = !is.na(epi1.deg$stat)
 use = epi1.deg[idx,]
 rk = use$stat
 names(rk) = use$Genes
 rk = sort(rk, decreasing = T)
+rk = rk[!duplicated(names(rk)) & !is.na(names(rk)) & names(rk) != ""]  # duplicated gene symbols: keep the one with the largest statistic (fgsea does not allow duplicates)
 
-pg = get_anno_genes('GO:0006693', database = "org.Mm.eg.db")
-pg.gset = split(x = pg$gene, f = pg$go_id)
-
-gs = as.data.frame(msigdbr(species = "Mus musculus", category = "C2")) 
+# WikiPathways prostaglandin gene sets (mouse, MSigDB C2)
+gs = as.data.frame(msigdbr(species = "Mus musculus", category = "C2"))
 pg.gs = unique(gs$gs_name[grep('PROSTAGLANDIN', gs$gs_name)])
 pg.gs = pg.gs[c(5,6)]
 
-pg.gset.wp = gs[gs$gs_name %in% pg.gs, c("gs_name", "gene_symbol", "gs_exact_source")] 
+pg.gset.wp = gs[gs$gs_name %in% pg.gs, c("gs_name", "gene_symbol", "gs_exact_source")]
 pg.gset.wp = split(x=pg.gset.wp$gene_symbol, f=pg.gset.wp$gs_name)
 
 gset = pg.gset.wp[1]
-fname = sprintf("%s/figure/FigureS1.B_epi1.tif", dir)
+fname = sprintf("%s/Figure1E.tiff", out_dir)
 labs = list(mt="Prostaglandin signaling", redgroup.lab="Aged", bluegroup.lab="Young", mlab="GSE213723")
-gseaPlot(fname, rk, gset, labs, xmax = 28000) 
-#xmax = length(rk)
-
+set.seed(1234)  # fgsea permutation P-value
+gseaPlot(fname, rk, gset, labs, xmax = 28000)
 
 
 
@@ -612,11 +558,11 @@ gseaPlot(fname, rk, gset, labs, xmax = 28000)
 ########################
 # Figure 1F
 ########################
-# kegg pathview
-dir = "C:/Dropbox/PNU/시스템생물학연구실/data/aging_PGE2"
-
+# KEGG arachidonic acid metabolism (mmu00590) coloured by log2FC (pathview)
 load(file = sprintf("%s/GEO/merge/Rdata/8_merge_DEG.Rdata", dir)) #epi1.deg, epi2.deg, paneth.deg, sm6Stem.deg, deg.li
 
+library(clusterProfiler)
+library(org.Mm.eg.db)
 library(pathview)
 
 deg.entrez = bitr(epi1.deg$Genes, fromType = 'SYMBOL', toType = 'ENTREZID', OrgDb = "org.Mm.eg.db")
@@ -624,14 +570,13 @@ deg.entrez[grep('Ptgs|Ptges', deg.entrez$SYMBOL),]
 
 logfc = epi1.deg$log2FoldChange[match(deg.entrez$SYMBOL, epi1.deg$Genes)]
 names(logfc) = epi1.deg$Genes[match(deg.entrez$SYMBOL, epi1.deg$Genes)]
-deg.entrez$log2FC = logfc 
+deg.entrez$log2FC = logfc
 entrez.log2fc = deg.entrez$log2FC
 names(entrez.log2fc) = deg.entrez$ENTREZID
 
-deg.entrez[grep('19224|19225', deg.entrez$ENTREZID),]
+deg.entrez[grep('19224|19225', deg.entrez$ENTREZID),]  # Ptgs1, Ptgs2
 
-setwd(sprintf("%s/pathview", dir))
-pathview(gene.data = entrez.log2fc, pathway.id = "mmu00590", species = "mmu") 
-
-
-
+# pathview writes its output (mmu00590.pathview.png) into the working directory
+old.wd = setwd(out_dir)
+pathview(gene.data = entrez.log2fc, pathway.id = "mmu00590", species = "mmu")
+setwd(old.wd)

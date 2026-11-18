@@ -1,0 +1,6 @@
+# input data and outputs are not part of the repository
+data/
+figure/
+.Rhistory
+.RData
+.Rproj.user/
